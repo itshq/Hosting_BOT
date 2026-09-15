@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # ================== التوكن والمتغيرات الأساسية ==================
 TOKEN = "8523721125:AAGSii55JRT8r7J6R-uDcTHabcisrlCV9ew"
 if not TOKEN:
-    المسجل. بالغ الأهمية ( "❌ لم يتم تعيين BOT_TOKEN في بيئة متغيرة" )
-    sys. exit ( 1 )
+    logger.error("❌ لم يتم تعيين BOT_TOKEN في بيئة متغيرة")
+    sys.exit(1)
 
 ADMIN_ID = 5011347901   # المعرف الخاص بك (خط أحمر 🛡️)
 
@@ -1785,7 +1785,6 @@ def user_panel(call, tuid):
         elif e:
             exp = e
     files = read_json(FILES_DB)
-    # تم تصحيح الخطأ هنا بإغلاق الأقواس بشكل صحيح
     u_files = [f for f in files.values() if f.get('user_id') == int(tuid)]
     text = f"🆔 الآيدي: <code>{tuid}</code>\n🔗 المعرف: @{u.get('username', 'لا يوجد')}\n📅 الانضمام: {u.get('join_date', '?')}\n\n💰 النقاط: <code>{u.get('points', 0)}</code>\n💎 الرتبة: {'VIP 👑' if vip else 'مجاني 🆓'}\n⏰ صلاحية VIP: {exp}\n\n📁 الملفات: {len(u_files)}\n🚫 الحالة: {'محظور ❌' if banned else 'نشط ✅'}"
     kb = types.InlineKeyboardMarkup(row_width=2)
