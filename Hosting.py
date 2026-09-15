@@ -113,7 +113,6 @@ def write_json(path, data):
             logger.error(f"خطأ في كتابة {path}: {e}")
 
 def deco(title, content):
-    settings = read_json(SETTINGS_DB)
     return f"<b>{title}</b>\n\n{content}\n\n<b>Div: @its_h_q</b>"
 
 def get_master_key():
@@ -314,23 +313,6 @@ def get_logs(fid, lines=40):
         logger.error(f"Logs error: {e}")
         return "❌ خطأ في القراءة"
 
-def update_token(path, new_token):
-    keywords = ["TOKEN", "bot_token", "api_key", "tok", "TKN", "BOT_TKN", "API_TOKEN"]
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        pattern = r"(['\"])\d{8,12}:[a-zA-Z0-9_-]{35,}(['\"])"
-        new_content = re.sub(pattern, f"\\1{new_token}\\2", content)
-        for kw in keywords:
-            kw_pattern = rf"{kw}\s*=\s*(['\"])[^'\"]+(['\"])"
-            new_content = re.sub(kw_pattern, f"{kw} = \\1{new_token}\\2", new_content)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-        return True
-    except Exception as e:
-        logger.error(f"Update token error: {e}")
-        return False
-
 def check_token(token):
     try:
         url = f"https://api.telegram.org/bot{token}/getMe"
@@ -495,7 +477,9 @@ def edit_msg(call, text, markup):
         else:
             bot.edit_message_text(text[:4096], call.message.chat.id, call.message.message_id, parse_mode="HTML", reply_markup=markup)
         save_message(call.message.chat.id, call.message.message_id)
-    except:
+    except Exception as e:
+        if "message is not modified" in str(e):
+            return
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except:
@@ -522,7 +506,6 @@ def del_msg(chat_id, *msg_ids):
 
 def main_kb(uid):
     kb = types.InlineKeyboardMarkup(row_width=2)
-    # تعديل ترتيب الأزرار: "رفع ملف جديد" على اليسار و "ملفاتي" على اليمين في نفس السطر (الصف الثاني)
     kb.row(
         types.InlineKeyboardButton("🗂 ملفاتي", callback_data="nav_files"),
         types.InlineKeyboardButton("📥 رفع ملف", callback_data="nav_upload")
@@ -539,7 +522,7 @@ def main_kb(uid):
         kb.row(types.InlineKeyboardButton("VIP 💎", callback_data="nav_pro"))
     kb.add(types.InlineKeyboardButton("👨‍💻 المطور", url="https://t.me/its_h_q"))
     if is_admin(uid):
-        kb.add(types.InlineKeyboardButton("⚙️ لوحة الإدارة", callback_data="nav_admin"))
+        kb.add(types.InlineKeyboardButton("🛡 الادارة", callback_data="nav_admin"))
     return kb
 
 def pro_panel_kb(uid):
@@ -850,7 +833,7 @@ def callback(call):
         elif data == "nav_upload":
             kb = types.InlineKeyboardMarkup(row_width=2)
             kb.add(
-                types.InlineKeyboardButton("🆓 مجانية", callback_data="up_free"),
+                types.InlineKeyboardButton("🆓 مجاني", callback_data="up_free"),
                 types.InlineKeyboardButton("💎 VIP", callback_data="up_pro")
             )
             kb.add(types.InlineKeyboardButton("🔙 رجوع", callback_data="nav_main"))
@@ -1802,11 +1785,11 @@ def user_panel(call, tuid):
         elif e:
             exp = e
     files = read_json(FILES_DB)
+    # تم تصحيح الخطأ هنا بإغلاق الأقواس بشكل صحيح
     u_files = [f for f in files.values() if f.get('user_id') == int(tuid)]
     text = f"🆔 الآيدي: <code>{tuid}</code>\n🔗 المعرف: @{u.get('username', 'لا يوجد')}\n📅 الانضمام: {u.get('join_date', '?')}\n\n💰 النقاط: <code>{u.get('points', 0)}</code>\n💎 الرتبة: {'VIP 👑' if vip else 'مجاني 🆓'}\n⏰ صلاحية VIP: {exp}\n\n📁 الملفات: {len(u_files)}\n🚫 الحالة: {'محظور ❌' if banned else 'نشط ✅'}"
     kb = types.InlineKeyboardMarkup(row_width=2)
     
-    # حماية المطور: عدم إظهار زر الحظر أو التعديل بشكل يضر المطور
     if int(tuid) == ADMIN_ID:
         text += "\n\n🛡️ <b>خط أحمر (المطور الأساسي)</b>"
     else:
