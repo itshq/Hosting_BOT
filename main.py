@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+import logging
 import json
 import threading
 import time
@@ -18,9 +19,18 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 
+# ================== إعداد التسجيل ==================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler('bot.log'), logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
 # ================== التوكن والمتغيرات الأساسية ==================
-TOKEN = "8523721125:AAGSii55JRT8r7J6R-uDcTHabcisrlCV9ew"
+TOKEN = '8523721125:AAEogQ85JUlXR6UTxY_dfoTP7RjzwPaJvP0'
 if not TOKEN:
+    logger.critical("❌ لم يتم تعيين BOT_TOKEN في متغيرات البيئة")
     sys.exit(1)
 
 ADMIN_ID = 5011347901  # المعرف الخاص بك (خط أحمر 🛡️)
@@ -39,10 +49,13 @@ for module, package in required_modules.items():
         missing_packages.append(package)
 
 if missing_packages:
+    logger.info(f"📦 جاري تثبيت الحزم المفقودة: {missing_packages}")
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
+        logger.info("✅ تم التثبيت بنجاح، يرجى إعادة تشغيل السكريبت.")
         sys.exit(0)
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ فشل التثبيت: {e}")
         sys.exit(1)
 
 import telebot
@@ -58,6 +71,7 @@ ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 THUMBS_DIR = os.path.join(ASSETS_DIR, 'thumbs')
 ENV_DIR = os.path.join(BASE_DIR, 'bot_environments')
 ENCRYPTED_DIR = os.path.join(BASE_DIR, 'encrypted_files')
+
 
 for d in [RUNNING_DIR, LOGS_DIR, DB_DIR, ASSETS_DIR, THUMBS_DIR, ENV_DIR, ENCRYPTED_DIR]:
     os.makedirs(d, exist_ok=True)
@@ -86,7 +100,8 @@ def read_json(path):
                 with open(path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             return {}
-        except:
+        except Exception as e:
+            logger.error(f"خطأ في قراءة {path}: {e}")
             return {}
 
 def write_json(path, data):
@@ -94,8 +109,8 @@ def write_json(path, data):
         try:
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"خطأ في كتابة {path}: {e}")
 
 def deco(title, content):
     settings = read_json(SETTINGS_DB)
@@ -147,7 +162,8 @@ def encrypt_file_content(content, fid, user_id):
             'timestamp': datetime.now().isoformat()
         }
         return json.dumps(encrypted_data)
-    except:
+    except Exception as e:
+        logger.error(f"Encryption error: {e}")
         return None
 
 def decrypt_file_content(encrypted_json, fid):
@@ -162,7 +178,8 @@ def decrypt_file_content(encrypted_json, fid):
         cipher = AES.new(key, AES.MODE_CBC, iv)
         pt = unpad(cipher.decrypt(ct), AES.block_size)
         return pt.decode('utf-8')
-    except:
+    except Exception as e:
+        logger.error(f"Decryption error: {e}")
         return None
 
 def save_encrypted_file(fid, content, user_id):
@@ -293,7 +310,8 @@ def get_logs(fid, lines=40):
                     safe = safe[:3000] + "\n..."
                 return f"<pre><code>{safe}</code></pre>"
         return "📝 لا توجد مخرجات"
-    except:
+    except Exception as e:
+        logger.error(f"Logs error: {e}")
         return "❌ خطأ في القراءة"
 
 def update_token(path, new_token):
@@ -309,7 +327,8 @@ def update_token(path, new_token):
         with open(path, 'w', encoding='utf-8') as f:
             f.write(new_content)
         return True
-    except:
+    except Exception as e:
+        logger.error(f"Update token error: {e}")
         return False
 
 def check_token(token):
@@ -367,7 +386,8 @@ def start_script(fid):
     try:
         with open(env_file_path, 'w', encoding='utf-8') as f:
             f.write(encrypted_content)
-    except:
+    except Exception as e:
+        logger.error(f"Failed to write script {fid}: {e}")
         return False
     log_path = os.path.join(LOGS_DIR, f"{fid}.log")
     try:
@@ -383,7 +403,8 @@ def start_script(fid):
         )
         active_processes[fid] = proc
         return True
-    except:
+    except Exception as e:
+        logger.error(f"Failed to start script {fid}: {e}")
         return False
 
 def stop_script(fid):
@@ -461,7 +482,8 @@ def send_msg(chat_id, text, markup=None):
             msg = bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         save_message(chat_id, msg.message_id)
         return msg
-    except:
+    except Exception as e:
+        logger.error(f"Send message error: {e}")
         msg = bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
         save_message(chat_id, msg.message_id)
         return msg
@@ -497,8 +519,10 @@ def del_msg(chat_id, *msg_ids):
             except:
                 pass
 
+
 def main_kb(uid):
     kb = types.InlineKeyboardMarkup(row_width=2)
+    # تعديل ترتيب الأزرار: "رفع ملف جديد" على اليسار و "ملفاتي" على اليمين في نفس السطر (الصف الثاني)
     kb.row(
         types.InlineKeyboardButton("🗂 ملفاتي", callback_data="nav_files"),
         types.InlineKeyboardButton("📥 رفع ملف", callback_data="nav_upload")
@@ -536,6 +560,7 @@ def back_kb(data="nav_main"):
     kb.add(types.InlineKeyboardButton("🔙 رجوع", callback_data=data))
     return kb
 
+
 @bot.message_handler(commands=['myid'])
 def myid_cmd(msg):
     uid = msg.from_user.id
@@ -544,6 +569,8 @@ def myid_cmd(msg):
         bot.send_message(msg.chat.id, f"✅ هذا هو نفس المعرف المسجل في الكود (ADMIN_ID = {ADMIN_ID}).")
     else:
         bot.send_message(msg.chat.id, f"⚠️ هذا المعرف ({uid}) يختلف عن ADMIN_ID المسجل في الكود ({ADMIN_ID}).")
+
+# ================== بداية معالجات البوت ==================
 
 @bot.message_handler(commands=['start'])
 def start_cmd(msg):
@@ -607,8 +634,8 @@ def start_cmd(msg):
             f"📖 استخدم الأزرار أدناه للبدء."
         )
         send_msg(msg.chat.id, deco("🏠 القائمة الرئيسية", welcome_text), main_kb(uid))
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Start error: {e}")
 
 def sub_msg(chat_id):
     settings = read_json(SETTINGS_DB)
@@ -621,6 +648,7 @@ def sub_msg(chat_id):
     kb.add(types.InlineKeyboardButton("✅ تحقق", callback_data="check_sub"))
     text = "🔔 <b>اشتراك إجباري</b>\n\nيجب الاشتراك في القنوات التالية:"
     send_msg(chat_id, deco("🔔 اشتراك مطلوب", text), kb)
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
@@ -1123,8 +1151,8 @@ def callback(call):
                     bot.answer_callback_query(call.id, "❌ فشل في التحميل!", show_alert=True)
             else:
                 bot.answer_callback_query(call.id, "❌ لا ملفات للتحميل!", show_alert=True)
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Callback error: {e}")
 
 def auto_fix_step(msg, prompt_id):
     uid = msg.from_user.id
@@ -1778,6 +1806,7 @@ def user_panel(call, tuid):
     text = f"🆔 الآيدي: <code>{tuid}</code>\n🔗 المعرف: @{u.get('username', 'لا يوجد')}\n📅 الانضمام: {u.get('join_date', '?')}\n\n💰 النقاط: <code>{u.get('points', 0)}</code>\n💎 الرتبة: {'VIP 👑' if vip else 'مجاني 🆓'}\n⏰ صلاحية VIP: {exp}\n\n📁 الملفات: {len(u_files)}\n🚫 الحالة: {'محظور ❌' if banned else 'نشط ✅'}"
     kb = types.InlineKeyboardMarkup(row_width=2)
     
+    # حماية المطور: عدم إظهار زر الحظر أو التعديل بشكل يضر المطور
     if int(tuid) == ADMIN_ID:
         text += "\n\n🛡️ <b>خط أحمر (المطور الأساسي)</b>"
     else:
@@ -2047,11 +2076,60 @@ def monitor():
                             bot.send_message(int(uid), deco("⏰ انتهت المدة", f"انتهت مدة {files[fid]['file_name']}"))
                         except:
                             pass
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Monitor error: {e}")
         time.sleep(60)
 
 # ================== التهيئة والتشغيل ==================
-if __name__ == '__main__':
+def init_db():
+    default_settings = {
+        "channels": [],
+        "bot_name": "Div: @its_h_q",
+        "bot_image": None,
+        "file_thumb": None,
+        "bot_locked": False,
+        "auto_approve": True
+    }
+    current_settings = read_json(SETTINGS_DB)
+    for key, value in default_settings.items():
+        if key not in current_settings:
+            current_settings[key] = value
+    write_json(SETTINGS_DB, current_settings)
+    
+    for path in [USERS_DB, FILES_DB, SECURITY_DB]:  
+        if not os.path.exists(path):
+            write_json(path, {})
+    
+    if not os.path.exists(ADMINS_DB):
+        write_json(ADMINS_DB, {"admins": [ADMIN_ID]})
+    else:
+        admins_data = read_json(ADMINS_DB)
+        if ADMIN_ID not in admins_data.get("admins", []):
+            admins_data["admins"] = admins_data.get("admins", []) + [ADMIN_ID]
+            write_json(ADMINS_DB, admins_data)
+    
+    for uid in user_notifications:
+        user_notifications[uid] = True
+    
+    init_security()
+
+def init_security():
+    security = read_json(SECURITY_DB)
+    if 'master_key' not in security:
+        master_key = base64.b64encode(get_random_bytes(32)).decode('utf-8')
+        security['master_key'] = master_key
+        security['file_keys'] = {}
+        write_json(SECURITY_DB, security)
+
+if __name__ == "__main__":
+    init_db()
     threading.Thread(target=monitor, daemon=True).start()
-    bot.infinity_polling(skip_pending=True)
+    logger.info("=" * 30)
+    logger.info("Div: @its_h_q - البوت يعمل")
+    logger.info("=" * 30)
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            logger.error(f"Polling error: {e}")
+            time.sleep(5)
